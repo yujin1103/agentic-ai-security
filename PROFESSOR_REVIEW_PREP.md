@@ -321,3 +321,54 @@ py -3 run.py --trials 200;  py -3 run.py --demo
 | 안전 등급 | 구조적 mock | 구조적 mock | mock(offline)+라이브(실egress) | 구조적 mock |
 
 > sentinel을 일부러 다르게 둔 건 추적성 때문(어느 실험의 흔적인지 즉시 구분). 의도된 설계다.
+
+---
+
+## 7. 다른 공격·방어 커버리지 (문헌 대조) — "또 뭐가 있나?" 대비
+
+문헌(OWASP LLM Top10 2025, Greshake 2302.12173 / Prompt Infection 2410.07283 / Agent Smith
+2402.08567, Spotlighting 2403.14720, dual-LLM, CaMeL, AgentPoison 등)과 레포 구현을 대조한 결과.
+
+### 공격 커버리지  (✅구현 · 🟡부분 · ❌미구현)
+- ✅ **구현**: 직접 인젝션 · 간접 인젝션 · 메모리 오염(AgentPoison/spAIware) · 멀티에이전트
+  자기전파(Prompt Infection) · worming · 페이로드 분할 · **과잉권한/confused-deputy**(I02 송금/
+  I03 삭제/I04 포스트/I05 예약)
+- 🟡 **부분**: RAG 오염(키워드 검색, 벡터 아님) · 멀티모달 OCR(추출채널만, 실픽셀 아님) ·
+  obfuscation(zero-width✅·homoglyph❌) · 인코딩(base64✅·ROT13/hex❌) · 다중언어 · 지연/sleeper 트리거
+- ❌ **미구현**: Agent Smith(멀티모달×멀티에이전트 전염) · 오디오/음성 · **MCP 도구설명 오염** ·
+  도구 rug-pull · **ASCII/유니코드-태그 스머글링**(U+E0000–E007F) · many-shot · **crescendo(다중턴
+  escalation)** · 시스템프롬프트 유출 · **마크다운-이미지 렌더 exfil** · 공급망 모델/플러그인 오염
+
+### 방어 커버리지
+- ✅ **구현**: 입력 살균(denylist) · 스포트라이팅-delimiting(tagging/provenance/`<untrusted_*>`) ·
+  constitutional 프롬프트
+- 🟡 **부분**: NFKC 정규화(**nanoclaw만**) · 데이터-명령 분리(`boundary`=고정 JSON, StruQ 아님) ·
+  provenance/taint(단일 경계 라벨, 전파 taint 아님) · 탐지 분류기(자작 정규식+옵션 LLM 심판,
+  Prompt Guard/Lakera 아님) · 샌드박싱(nanoclaw 컨테이너) · LLM-as-judge(입력 심사만)
+- ❌ **미구현**: datamarking/encoding 스포트라이팅 · 가드레일 프레임워크(NeMo/Llama Guard) ·
+  **IFC/dataflow tracking** · **CaMeL** · **dual-LLM/격리** · **최소권한 도구 게이팅** ·
+  **휴먼인더루프 승인** · **egress 허용목록/출력 필터** · plan-then-execute · action-selector ·
+  서브에이전트 격리 · context 최소화 · rate-limit · self-critique · 견고성 파인튜닝(Jatmo/SecAlign)
+
+> ⚠️ **실제 구멍(점검에서 먼저 밝힐 것):** depth 랩 3종 sanitizer가 **유니코드 정규화를 안 해서
+> zero-width/전각 우회에 뚫린다**(오직 nanoclaw `review_gate._normalize`만 정규화). → 아래 cheap #1.
+
+### 권장 추가 (cheap → large; stdlib로 가능한 것 우선)
+| # | 항목 | 난이도 | 왜 |
+|---|---|---|---|
+| 1 | 유니코드 Tags-block+bidi 제거를 `review_gate._normalize`에 추가 + **depth 랩 3종 sanitizer에도 normalize 적용** | cheap | ASCII 스머글링 공백 닫고 **실제 방어 구멍 수리**(zero-width 우회) |
+| 2 | **egress 허용목록**: send_external/송금 전 목적지·비밀패턴 검사→차단 | cheap | 가장 가치 높은 미구현 방어. 이미 사후 탐지하므로 차단 게이트로 전환만 |
+| 3 | 마크다운-이미지/링크 exfil 페이로드 + 렌더 URL 무력화 sink | cheap | 흔한 실세계 exfil 벡터 |
+| 4 | ROT13/hex 페이로드 + decode-후-재검사 | cheap | 인코딩 행 'covered'로 완성 |
+| 5 | 휴먼인더루프/최소권한 게이트(breadth I02/I03) ASR before/after | medium | 가장 많이 인용되는 방어, 깔끔한 대비 스토리 |
+| 6 | Task-Shield식 행동 심사 judge(제안 도구호출 vs 사용자 의도) | medium | 과잉권한 케이스에 가장 효과적 |
+| 7 | MCP 도구설명 오염 공격 + 탐지(`audit_mcp_tools.py` 확장) | medium | 2025 핫토픽(Invariant Labs/CVE-2025-54136) |
+| 8 | 실제 픽셀 멀티모달(VLM에 렌더 이미지) | large | 멀티모달 'partial→covered', 한계 제거 |
+
+### 한 줄 요약 (교수 질문 "또 뭐가 있나?" 답변)
+> "핵심(간접인젝션·메모리·멀티에이전트·멀티모달채널·과잉권한)과 방어 스택(살균·스포트라이팅·
+> 정규화·cross-channel·write-gate·구조화relay·정규식+LLM심판)은 커버합니다. 정직한 경계:
+> **멀티모달은 픽셀 아닌 추출채널, 메모리는 벡터 아닌 키워드**, 시스템급 방어(egress 허용목록·
+> 휴먼인더루프·최소권한·CaMeL/dual-LLM)와 일부 공격(유니코드-태그·마크다운exfil·MCP도구오염·
+> crescendo·many-shot)은 미구현입니다. 가장 싼 다음 단계는 stdlib만으로: 정규화 확장, 사후
+> 탐지→차단 egress 허용목록, 마크다운/ROT13 변형 추가입니다."
