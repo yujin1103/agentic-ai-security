@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+lab_env/current_case.json
+lab_env/state.json
+lab_env/traces/*.jsonl
+outputs/*.csv
+outputs/*.jsonl
+outputs/*.tmp

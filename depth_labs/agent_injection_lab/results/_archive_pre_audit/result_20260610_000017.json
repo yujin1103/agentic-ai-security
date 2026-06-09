@@ -1,0 +1,66 @@
+{
+  "config": {
+    "backend": "mock",
+    "model": null,
+    "n_agents": 5,
+    "trials": 200,
+    "ingest_defense": "none",
+    "relay_defenses": [
+      "none",
+      "tagging",
+      "sanitize",
+      "boundary"
+    ],
+    "seed": 42,
+    "temperature": 0.0,
+    "roles": [
+      "researcher",
+      "summarizer",
+      "analyst",
+      "writer",
+      "reviewer"
+    ]
+  },
+  "by_defense": {
+    "none": {
+      "trials": 200,
+      "n_agents": 5,
+      "mean_infection_rate": 0.843,
+      "mean_n_infected": 4.215,
+      "mean_propagation_depth": 3.215,
+      "attack_success_rate": 0.94,
+      "containment_pct": 0.0,
+      "sample_chain": "rese0[INF*] → summ1[INF*] → anal2[INF*] → writ3[INF*] → revi4[INF*]"
+    },
+    "tagging": {
+      "trials": 200,
+      "n_agents": 5,
+      "mean_infection_rate": 0.305,
+      "mean_n_infected": 1.525,
+      "mean_propagation_depth": 0.525,
+      "attack_success_rate": 0.94,
+      "containment_pct": 63.8,
+      "sample_chain": "rese0[INF*] → summ1[exp] → anal2[ok] → writ3[ok] → revi4[ok]"
+    },
+    "sanitize": {
+      "trials": 200,
+      "n_agents": 5,
+      "mean_infection_rate": 0.19,
+      "mean_n_infected": 0.95,
+      "mean_propagation_depth": -0.05,
+      "attack_success_rate": 0.95,
+      "containment_pct": 77.5,
+      "sample_chain": "rese0[INF*] → summ1[ok] → anal2[ok] → writ3[ok] → revi4[ok]"
+    },
+    "boundary": {
+      "trials": 200,
+      "n_agents": 5,
+      "mean_infection_rate": 0.194,
+      "mean_n_infected": 0.97,
+      "mean_propagation_depth": -0.03,
+      "attack_success_rate": 0.97,
+      "containment_pct": 77.0,
+      "sample_chain": "rese0[INF*] → summ1[ok] → anal2[ok] → writ3[ok] → revi4[ok]"
+    }
+  }
+}

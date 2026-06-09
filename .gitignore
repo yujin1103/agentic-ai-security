@@ -1,0 +1,36 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node ---
+node_modules/
+
+# --- 제3자 공격 대상 프레임워크 (자체 git repo; 별도로 clone) ---
+# 설치법: depth_labs/nanoclaw_attack_lab/README.md 참고
+#   git clone https://github.com/nanocoai/nanoclaw.git
+depth_labs/nanoclaw/
+
+# --- 랩 런타임 상태 / 대용량 로그 (재생성 가능) ---
+**/lab_env/
+breadth_benchmark/agentdojo/lab_env/
+**/results/memory_store.json
+**/results/exfil_log.jsonl
+**/results/exfil_observed.jsonl
+**/results/_archive_pre_audit/exfil_log.jsonl
+depth_labs/nanoclaw_attack_lab/results/sandbox/
+
+# --- 임시/스크래치 ---
+_ppt_extract/
+*.log
+*.tmp
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini

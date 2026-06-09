@@ -1,0 +1,11 @@
+[project]
+name = "agentdojo-mcp-lab-realistic"
+version = "0.1.0"
+description = "Safe AgentDojo-style MCP prompt injection lab with realistic MCP tool schemas and fake lab-only state."
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=2.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
