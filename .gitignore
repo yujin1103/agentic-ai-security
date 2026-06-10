@@ -32,6 +32,14 @@ depth_labs/*/results/result_20*.json
 depth_labs/*/results/grid_20*.json
 depth_labs/*/results/memresult_20*.json
 
+# --- 비밀/자격증명 (절대 커밋 금지) ---
+.env
+.env.*
+*.key
+*.pem
+**/secrets*
+**/api_key*
+
 # --- 임시/스크래치 ---
 _ppt_extract/
 *.log

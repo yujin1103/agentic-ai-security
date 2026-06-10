@@ -26,12 +26,39 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from lab import config  # noqa: E402
-from lab.runner import run_sweep, run_grid  # noqa: E402
+from lab.runner import run_sweep, run_grid, run_cross_model, parse_chain_specs  # noqa: E402
+
+
+def _print_cross(result: dict) -> None:
+    cfg = result["config"]
+    print("\n" + "=" * 96)
+    print(" 모델 간 전파(이종 체인) 실험 — 위치별 감염률   [실모델]")
+    print("=" * 96)
+    print(f" 체인: {' → '.join(cfg['chain'])}")
+    print(f" trials={cfg['trials']}  ingest={cfg['ingest_defense']}  relay={cfg['relay_defense']}"
+          f"  egress_guard={cfg['egress_guard']}")
+    print("-" * 96)
+    print(f"{'위치':<5}{'모델':<28}{'노출%':>9}{'감염%':>9}{'전파(forward)%':>16}")
+    print("-" * 96)
+    for p in result["per_position"]:
+        print(f"{p['pos']:<5}{p['model']:<28}{p['exposure_rate']*100:>8.0f}%"
+              f"{p['infection_rate']*100:>8.0f}%{p['forward_rate']*100:>15.0f}%")
+    print("-" * 96)
+    o = result["overall"]
+    depth = o["depth_given_breach"]
+    print(f" 전체 ASR={o['asr']*100:.0f}%  IR={o['ir']*100:.0f}%  "
+          f"깊이|감염={depth:.2f}" if depth is not None else
+          f" 전체 ASR={o['asr']*100:.0f}%  IR={o['ir']*100:.0f}%  깊이|감염=—")
+    print(f" 모델 간 전파(agent-0 과 다른 모델 위치 감염)?: {result['cross_model_propagation']}")
+    print(f" 샘플 체인: {result['sample_chain']}")
 
 
 def _label(backend: str) -> str:
-    return ("[mock=가정 파라미터 기반 시뮬레이션 — 측정값 아님]" if backend == "mock"
-            else "[ollama=실모델 측정]")
+    if backend == "mock":
+        return "[mock=가정 파라미터 기반 시뮬레이션 — 측정값 아님]"
+    if backend == "gemini":
+        return "[gemini=상용 실모델 측정]"
+    return "[ollama=로컬 실모델 측정]"
 
 
 def _ci(pair) -> str:
@@ -101,8 +128,8 @@ def _print_chains(result: dict) -> None:
 
 def main() -> None:
     p = argparse.ArgumentParser(description="멀티에이전트 인젝션 전파 실험")
-    p.add_argument("--backend", choices=["mock", "ollama"], default="mock")
-    p.add_argument("--model", default="llama3.1", help="ollama 모델명")
+    p.add_argument("--backend", choices=["mock", "ollama", "gemini"], default="mock")
+    p.add_argument("--model", default="llama3.1", help="ollama/gemini 모델명")
     p.add_argument("--agents", type=int, default=5, help="체인 내 에이전트 수")
     p.add_argument("--trials", type=int, default=20, help="방어별 반복 trial 수")
     p.add_argument("--ingest-defense", choices=config.DEFENSES, default="none")
@@ -115,6 +142,8 @@ def main() -> None:
     p.add_argument("--mock-suscept", default="", help="'untagged,tagged' (예: 0.8,0.2) 민감도 분석")
     p.add_argument("--egress-guard", action="store_true",
                    help="출력 경계 방어 ON(모델 무관). 감염돼도 비밀 전송을 차단 → ASR 0 기대")
+    p.add_argument("--chain-models", default="",
+                   help="이종 체인(모델 간 전파): 'ollama:llama3.2,gemini:gemini-2.5-flash,ollama:llama3.2'")
     p.add_argument("--show-chain", action="store_true")
     p.add_argument("--out", default="")
     args = p.parse_args()
@@ -129,7 +158,16 @@ def main() -> None:
     if args.backend == "ollama":
         print(f"[ollama] http://localhost:11434 '{args.model}' 사용 시도(서버 미가동 시 미감염 처리).")
 
-    if args.grid:
+    if args.chain_models:
+        result = run_cross_model(
+            parse_chain_specs(args.chain_models), n_agents=args.agents, trials=args.trials,
+            seed=args.seed, temperature=args.temperature, poison_index=args.poison_index,
+            ingest_defense=args.ingest_defense,
+            relay_defense=args.relay_defenses.split(",")[0].strip() or "none",
+            egress_guard=args.egress_guard)
+        _print_cross(result)
+        prefix = "xmodel"
+    elif args.grid:
         result = run_grid(
             backend=args.backend, model=args.model, n_agents=args.agents, trials=args.trials,
             ingest_defenses=[d.strip() for d in args.ingest_defenses.split(",") if d.strip()],

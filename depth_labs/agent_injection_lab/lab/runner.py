@@ -55,7 +55,7 @@ def run_sweep(backend: str = "mock", model: str = "llama3.1", n_agents: int = 5,
 
     return {
         "config": {
-            "backend": backend, "model": model if backend == "ollama" else None,
+            "backend": backend, "model": model if backend in ("ollama", "gemini") else None,
             "n_agents": n_agents, "trials": trials, "ingest_defense": ingest_defense,
             "relay_defenses": relay_defenses, "seed": seed, "temperature": temperature,
             "egress_guard": egress_guard,
@@ -98,4 +98,69 @@ def run_grid(backend: str = "mock", model: str = "llama3.1", n_agents: int = 5,
                    "ingest_defenses": ingest_defenses, "relay_defenses": relay_defenses,
                    "mock_susceptibility": config.MOCK_SUSCEPTIBILITY if backend == "mock" else None},
         "grid": grid,
+    }
+
+
+def parse_chain_specs(specs_str: str) -> list[tuple[str, str]]:
+    """'ollama:llama3.2,gemini:gemini-2.5-flash,mock:' → [(backend, model), ...]."""
+    out = []
+    for tok in specs_str.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        be, _, mo = tok.partition(":")
+        out.append((be.strip(), mo.strip()))
+    return out
+
+
+def run_cross_model(specs: list[tuple[str, str]], n_agents: int = 5, trials: int = 8,
+                    seed: int = 42, temperature: float = 0.0, poison_index: int = 0,
+                    ingest_defense: str = "none", relay_defense: str = "none",
+                    egress_guard: bool = False) -> dict:
+    """이종(모델 간) 체인. 에이전트 i 는 specs[i % len] 모델을 쓴다.
+
+    한 키(공급자)면 키 하나로 충분: 같은 spec 은 클라이언트를 공유한다. 위치별 감염률과
+    'agent-0 과 다른 모델 위치가 감염됐는가(모델 간 전파)'를 측정한다.
+    """
+    roles = build_roles(n_agents)
+    cache: dict[tuple[str, str], object] = {}
+    per_agent, labels = [], []
+    for i in range(n_agents):
+        be, mo = specs[i % len(specs)]
+        if (be, mo) not in cache:
+            cache[(be, mo)] = make_client(be, model=mo or "llama3.1", temperature=temperature)
+        per_agent.append(cache[(be, mo)])
+        labels.append(f"{be}:{mo or 'default'}")
+
+    trial_results = []
+    for t in range(trials):
+        tools = ToolRegistry(trial_id=f"xmodel.{t}")
+        orch = ChainOrchestrator(roles, per_agent[0], tools, config.SANDBOX_SECRET,
+                                 ingest_defense=ingest_defense, relay_defense=relay_defense,
+                                 egress_guard=egress_guard, llms=per_agent)
+        trial_results.append(orch.run_once(_trial_seed(seed, t), poison_index=poison_index))
+
+    n = len(trial_results)
+    per_pos = []
+    for i in range(n_agents):
+        infected = sum(1 for tr in trial_results if tr.traces[i].infected)
+        forwarded = sum(1 for tr in trial_results if tr.traces[i].forwarded_payload)
+        exposed = sum(1 for tr in trial_results if tr.traces[i].exposed)
+        per_pos.append({"pos": i, "model": labels[i],
+                        "exposure_rate": exposed / n if n else 0.0,
+                        "infection_rate": infected / n if n else 0.0,
+                        "forward_rate": forwarded / n if n else 0.0})
+    agg = metrics.aggregate(trial_results)
+    # 모델 간 전파: agent-0 과 '다른 모델'인 하류 위치가 1번이라도 감염됐는가.
+    cross = any(per_pos[i]["infection_rate"] > 0 and labels[i] != labels[0]
+                for i in range(1, n_agents))
+    return {
+        "config": {"chain": labels, "trials": trials, "n_agents": n_agents, "seed": seed,
+                   "ingest_defense": ingest_defense, "relay_defense": relay_defense,
+                   "egress_guard": egress_guard},
+        "per_position": per_pos,
+        "overall": {"asr": agg["attack_success_rate"], "ir": agg["mean_infection_rate"],
+                    "depth_given_breach": agg["mean_depth_given_breach"]},
+        "cross_model_propagation": cross,
+        "sample_chain": metrics.render_chain(trial_results[0]) if trial_results else "",
     }

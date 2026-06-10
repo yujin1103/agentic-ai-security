@@ -46,7 +46,7 @@ def build_roles(n: int) -> list[tuple[str, str]]:
 class ChainOrchestrator:
     def __init__(self, roles, llm: LLMClient, tools: ToolRegistry, secret: str,
                  ingest_defense: str = "none", relay_defense: str = "none",
-                 egress_guard: bool = False):
+                 egress_guard: bool = False, llms: list[LLMClient] | None = None):
         self.roles = roles
         self.llm = llm
         self.tools = tools
@@ -54,6 +54,8 @@ class ChainOrchestrator:
         self.ingest_defense = ingest_defense
         self.relay_defense = relay_defense
         self.egress_guard = egress_guard   # 출력 경계(egress) 방어 — 모델 무관
+        # llms: 에이전트별 서로 다른 모델(이종 체인=모델 간 전파). None 이면 전원 self.llm.
+        self.llms = llms
 
     def run_once(self, trial_seed: int, poison_index: int = 0) -> TrialResult:
         # 외부 문서 수집(오염 문서 포함) → 에이전트 0 입력(입력 경계 방어 적용)
@@ -66,7 +68,8 @@ class ChainOrchestrator:
             # CRN: 방어와 무관하게 (trial, agent) 고정 RNG → 같은 trial 의 같은 hop 은 동일 주사위.
             # (random.Random 은 튜플 시드를 받지 않으므로 문자열 시드로 결합한다.)
             rng = random.Random(f"{trial_seed}:{i}")
-            agent = Agent(i, role, instr, self.llm, self.tools, self.secret,
+            llm_i = self.llms[i % len(self.llms)] if self.llms else self.llm
+            agent = Agent(i, role, instr, llm_i, self.tools, self.secret,
                           egress_guard=self.egress_guard)
             out_msg, trace = agent.act(msg, tagged, rng)
             traces.append(trace)
