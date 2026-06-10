@@ -105,7 +105,7 @@ async def run_case(case_id: str, model: str, backend: str = "ollama", max_steps:
 async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--case-id", required=True, help="쉼표로 여러 개 가능")
-    ap.add_argument("--backend", choices=["ollama", "gemini"], default="ollama")
+    ap.add_argument("--backend", choices=["ollama", "gemini", "openai"], default="ollama")
     ap.add_argument("--model", default="llama3.1")
     ap.add_argument("--pace", type=float, default=0.0, help="gemini 무료티어 RPM 페이싱(초)")
     ap.add_argument("--verbose", action="store_true")
