@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 import re
+import unicodedata
 from . import config
 
 # 살균/일관성 검사가 잡아내는 인젝션·명령형 신호 패턴(한/영).
@@ -26,16 +27,30 @@ SIGNAL_PATTERNS = [
 ]
 _SIG_RE = re.compile("|".join(SIGNAL_PATTERNS), re.IGNORECASE)
 
+# 인비저블/난독화 문자 제거표(zero-width·bidi·Unicode Tags) — 정규화 없이 검사하면 우회된다.
+_OBFUSCATION_STRIP = dict.fromkeys(
+    [0x200B, 0x200C, 0x200D, 0xFEFF]
+    + list(range(0x202A, 0x202F)) + list(range(0x2066, 0x206A))
+    + list(range(0xE0000, 0xE0080)),
+    None,
+)
+
+
+def normalize_text(text: str) -> str:
+    """살균/일관성 검사 전 정규화: NFKC + 인비저블/난독화 문자 제거(zero-width 우회 차단)."""
+    return unicodedata.normalize("NFKC", text).translate(_OBFUSCATION_STRIP)
+
 
 def _sanitize(text: str) -> str:
-    """인젝션·명령형 신호가 포함된 라인을 통째로 제거한다."""
+    """인젝션·명령형 신호가 포함된 라인을 통째로 제거한다(정규화 후)."""
+    text = normalize_text(text)
     kept = [ln for ln in text.splitlines() if not _SIG_RE.search(ln)]
     return "\n".join(kept).strip()
 
 
 def _looks_imperative(text: str) -> bool:
-    """추출 텍스트가 '명령형/인젝션 의도'를 담고 있는지(신호 패턴 매칭)."""
-    return bool(_SIG_RE.search(text))
+    """추출 텍스트가 '명령형/인젝션 의도'를 담고 있는지(정규화 후 신호 패턴 매칭)."""
+    return bool(_SIG_RE.search(normalize_text(text)))
 
 
 def apply(text: str, defense: str, image: dict | None = None) -> tuple[str, bool]:

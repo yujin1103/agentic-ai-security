@@ -45,6 +45,8 @@ def _print_table(result: dict) -> None:
     print("=" * 96)
     print(f" backend={cfg['backend']}  model={cfg['model']}  agents={cfg['n_agents']}  "
           f"trials={cfg['trials']}  ingest_defense={cfg['ingest_defense']}  seed={cfg['seed']}")
+    if cfg.get("egress_guard"):
+        print(" egress_guard=ON  → 출력 경계 차단(모델 무관). 모델이 감염돼도 비밀이 못 나가 ASR=0 기대.")
     if cfg.get("mock_susceptibility"):
         print(f" mock 취약성(가정): {cfg['mock_susceptibility']}  ← 이 dial 이 mock 결과를 결정한다")
     print(f" 체인: {' → '.join(cfg['roles'])}   (CRN: 방어 간 동일 trial=동일 난수, paired 비교)")
@@ -111,6 +113,8 @@ def main() -> None:
     p.add_argument("--temperature", type=float, default=0.0)
     p.add_argument("--poison-index", type=int, default=0)
     p.add_argument("--mock-suscept", default="", help="'untagged,tagged' (예: 0.8,0.2) 민감도 분석")
+    p.add_argument("--egress-guard", action="store_true",
+                   help="출력 경계 방어 ON(모델 무관). 감염돼도 비밀 전송을 차단 → ASR 0 기대")
     p.add_argument("--show-chain", action="store_true")
     p.add_argument("--out", default="")
     args = p.parse_args()
@@ -138,7 +142,8 @@ def main() -> None:
             backend=args.backend, model=args.model, n_agents=args.agents, trials=args.trials,
             ingest_defense=args.ingest_defense,
             relay_defenses=[d.strip() for d in args.relay_defenses.split(",") if d.strip()],
-            seed=args.seed, temperature=args.temperature, poison_index=args.poison_index)
+            seed=args.seed, temperature=args.temperature, poison_index=args.poison_index,
+            egress_guard=args.egress_guard)
         _print_table(result)
         if args.show_chain:
             _print_chains(result)

@@ -26,8 +26,8 @@ def run_sweep(backend: str = "mock", model: str = "llama3.1", n_agents: int = 5,
               trials: int = 20, ingest_defense: str = "none",
               relay_defenses: list[str] | None = None, seed: int = 42,
               temperature: float = 0.0, poison_index: int = 0,
-              keep_sample: bool = True) -> dict:
-    """relay 방어 전략별 스윕(ingest_defense 고정)."""
+              keep_sample: bool = True, egress_guard: bool = False) -> dict:
+    """relay 방어 전략별 스윕(ingest_defense 고정). egress_guard: 출력 경계 방어 on/off."""
     relay_defenses = relay_defenses or list(config.DEFENSES)
     roles = build_roles(n_agents)
     llm = make_client(backend, model=model, temperature=temperature)
@@ -39,7 +39,8 @@ def run_sweep(backend: str = "mock", model: str = "llama3.1", n_agents: int = 5,
         for t in range(trials):
             tools = ToolRegistry(trial_id=f"{relay}.{t}")   # 기본 비기록(메모리만)
             orch = ChainOrchestrator(roles, llm, tools, config.SANDBOX_SECRET,
-                                     ingest_defense=ingest_defense, relay_defense=relay)
+                                     ingest_defense=ingest_defense, relay_defense=relay,
+                                     egress_guard=egress_guard)
             tr = orch.run_once(_trial_seed(seed, t), poison_index=poison_index)
             trial_results.append(tr)
             # 대표 샘플: 첫 '감염 발생' trial(없으면 첫 trial). 우연한 미감염 샘플 회피.
@@ -57,6 +58,7 @@ def run_sweep(backend: str = "mock", model: str = "llama3.1", n_agents: int = 5,
             "backend": backend, "model": model if backend == "ollama" else None,
             "n_agents": n_agents, "trials": trials, "ingest_defense": ingest_defense,
             "relay_defenses": relay_defenses, "seed": seed, "temperature": temperature,
+            "egress_guard": egress_guard,
             "mock_susceptibility": config.MOCK_SUSCEPTIBILITY if backend == "mock" else None,
             "roles": [r for r, _ in roles],
         },

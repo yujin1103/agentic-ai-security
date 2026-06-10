@@ -52,3 +52,9 @@ MOCK_SUSCEPTIBILITY = {
 # 0으로 만든다(=경쟁 방어가 아니라 채널 제거의 상한). 대신 정상 요약도 파괴되므로 relay
 # fidelity 가 0이 된다 — 표에서 봉쇄율과 fidelity 를 함께 보고해 그 trade-off 를 드러낸다.
 DEFENSES = ["none", "tagging", "sanitize", "boundary"]
+
+# --- egress 허용목록 방어(출력 경계, 모델 무관) ---
+# 위 4종은 모두 '입력' 경계 방어라 모델이 굴복하면 뚫린다(실측: 3B 는 뚫림). egress 게이트는
+# send_external 이 '실제로 나가기 직전'에 목적지 채널과 페이로드를 검사해 차단하는 출력 방어다.
+# 허용목록이 비어 있으면(기본) 모든 외부 전송을 거부 → 모델이 완전히 감염돼도 비밀이 못 나간다.
+EGRESS_ALLOWLIST: frozenset[str] = frozenset()  # 허용된 외부 채널(기본: 없음 = 전면 차단)

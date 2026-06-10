@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 import re
+import unicodedata
 from . import config
 
 # 살균(sanitize)이 잡아내는 인젝션 신호 패턴(한/영).
@@ -23,9 +24,28 @@ SANITIZE_PATTERNS = [
 ]
 _SAN_RE = re.compile("|".join(SANITIZE_PATTERNS), re.IGNORECASE)
 
+# 인비저블/난독화 문자 제거표 — 정규화 없이 살균하면 zero-width/전각/Tags-block 우회에 뚫린다.
+#   zero-width(U+200B-200D,FEFF) · bidi override(U+202A-202E,2066-2069) · Unicode Tags(U+E0000-E007F)
+_OBFUSCATION_STRIP = dict.fromkeys(
+    [0x200B, 0x200C, 0x200D, 0xFEFF]
+    + list(range(0x202A, 0x202F)) + list(range(0x2066, 0x206A))
+    + list(range(0xE0000, 0xE0080)),
+    None,
+)
+
+
+def normalize_text(text: str) -> str:
+    """살균 전에 적용하는 정규화: NFKC + 인비저블/난독화 문자 제거.
+
+    공격자가 SENTINEL/명령어를 zero-width·전각·Unicode Tags 로 숨겨도 먼저 정규화해
+    살균 패턴이 잡을 수 있게 한다(=감사에서 지적된 'depth 랩 정규화 누락' 구멍 수리).
+    """
+    return unicodedata.normalize("NFKC", text).translate(_OBFUSCATION_STRIP)
+
 
 def _sanitize(text: str) -> str:
-    """인젝션 신호가 포함된 라인을 통째로 제거한다."""
+    """인젝션 신호가 포함된 라인을 통째로 제거한다(정규화 후)."""
+    text = normalize_text(text)
     kept = [ln for ln in text.splitlines() if not _SAN_RE.search(ln)]
     return "\n".join(kept).strip()
 
@@ -53,3 +73,18 @@ def apply(text: str, defense: str) -> tuple[str, bool]:
 # fidelity 측정은 relay 결과가 이 문자열인지로 '정상 콘텐츠 파괴'를 백엔드 무관하게 판정한다.
 BOUNDARY_MARKER = "구조화된 결과만 relay됨"
 BOUNDARY_REPLACEMENT = f'{{"status":"ok","summary":"({BOUNDARY_MARKER} — 자유 텍스트 차단)"}}'
+
+
+def egress_blocked(channel: str, data: str, secret: str,
+                   allowlist: frozenset[str] = config.EGRESS_ALLOWLIST) -> tuple[bool, str]:
+    """출력 경계 방어: send_external 이 나가기 직전 검사. (차단?, 사유) 반환.
+
+    - 목적지 채널이 허용목록에 없으면 차단(기본: 허용목록 비어 전면 차단).
+    - 페이로드에 비밀 토큰이 보이면 차단(데이터 손실 방지).
+    입력 방어와 달리 모델 거동과 무관하게 작동한다(완전 감염된 모델도 못 뚫는다).
+    """
+    if channel not in allowlist:
+        return True, f"channel-not-allowlisted:{channel}"
+    if secret and secret in str(data):
+        return True, "secret-in-payload"
+    return False, ""
