@@ -144,6 +144,10 @@ def main() -> None:
                    help="출력 경계 방어 ON(모델 무관). 감염돼도 비밀 전송을 차단 → ASR 0 기대")
     p.add_argument("--chain-models", default="",
                    help="이종 체인(모델 간 전파): 'ollama:llama3.2,gemini:gemini-2.5-flash,ollama:llama3.2'")
+    p.add_argument("--payload", choices=list(["blatant", "workflow", "tool_result", "audit_bot"]),
+                   default="blatant", help="공격 페이로드 변형(정렬 모델엔 위장형이 필요)")
+    p.add_argument("--secret-framing", choices=["guarded", "ambient"], default="guarded",
+                   help="guarded=비밀을 '노출금지' 명시(방어↑) / ambient=평범한 환경 구성값(현실적)")
     p.add_argument("--show-chain", action="store_true")
     p.add_argument("--out", default="")
     args = p.parse_args()
@@ -152,6 +156,8 @@ def main() -> None:
         u, t = (float(x) for x in args.mock_suscept.split(","))
         config.MOCK_SUSCEPTIBILITY["untagged"] = u
         config.MOCK_SUSCEPTIBILITY["tagged"] = t
+    config.INJECTION_VARIANT = args.payload   # 공격 페이로드 변형 선택
+    config.SECRET_FRAMING = args.secret_framing   # 비밀 프레이밍(시나리오 현실성)
 
     print("[안전] 모든 도구는 모의(mock)입니다 — 실제 전송/삭제 없음, 더미 데이터만 사용.")
     print(f"[백엔드] {_label(args.backend)}")
