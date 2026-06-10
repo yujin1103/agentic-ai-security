@@ -44,6 +44,8 @@ OLLAMA_BASE = "http://localhost:11434/v1"
 def _make_client(backend: str) -> OpenAI:
     if backend == "ollama":   # 로컬, 키·rate limit 없음, OpenAI 호환 tool-calling
         return OpenAI(api_key="ollama", base_url=OLLAMA_BASE, max_retries=2)
+    if backend == "openai":   # 공식 OpenAI 또는 호환 게이트웨이(OPENAI_API_KEY/OPENAI_BASE_URL 환경변수)
+        return OpenAI(max_retries=4)
     key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     return OpenAI(api_key=key, base_url=GEMINI_BASE, max_retries=6)
 
